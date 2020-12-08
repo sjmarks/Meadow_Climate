@@ -1,0 +1,238 @@
+---
+title: "Control_Climate_Aug2020"
+author: "Simon Marks"
+date: "9/23/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(data.table)
+library(openair)
+```
+
+```{r}
+
+coalesce_join <- function(x, y, 
+                          by = NULL, suffix = c(".x", ".y"), 
+                          join = dplyr::full_join, ...) {
+  
+    joined <- join(x, y, by = by, suffix = suffix, ...)
+    
+    # names of desired output
+    cols <- dplyr::union(names(x), names(y))
+    
+    to_coalesce <- names(joined)[!names(joined) %in% cols]
+    
+    suffix_used <- suffix[ifelse(endsWith(to_coalesce, suffix[1]), 1, 2)]
+    
+    # remove suffixes and reduplicate
+    to_coalesce <- unique(substr(
+        to_coalesce, 
+        1, 
+        nchar(to_coalesce) - nchar(suffix_used)
+    ))
+    
+    coalesced <- purrr::map_dfc(to_coalesce, ~dplyr::coalesce(
+        joined[[paste0(.x, suffix[1])]], 
+        joined[[paste0(.x, suffix[2])]]
+    ))
+    
+    names(coalesced) <- to_coalesce
+    
+    dplyr::bind_cols(joined, coalesced)[cols]
+}
+
+```
+
+```{r}
+
+## function for reading atmospheric data from u20 hobo from raw file
+
+read_atm_hobo_u20 <- function(path){
+  
+  # Avoid problem of not knowing the number of cols coming from Hobo file (i.e. avoid warning)
+  no_of_cols <- readr::read_csv(path, skip = 1, n_max = 1, col_types = cols(.default = col_guess())) %>% 
+    ncol()
+  
+  no_of_cols_drop_at_end <- no_of_cols - 4
+  
+  data <- readr::read_csv(path, skip = 2, 
+                          col_types = paste0("_cdd", stringi::stri_dup("_", no_of_cols_drop_at_end)), 
+                          col_names = c("Date", "baro.pressure_psi", "baro.temp_F")) %>% 
+    dplyr::mutate(Date = lubridate::mdy_hms(Date)) %>% 
+    dplyr::filter(!is.na(baro.pressure_psi))
+  
+  return(data)
+  
+}
+
+```
+
+```{r}
+
+## function for reading climate data from raw file- snow or no snow in file (there were two file configurations in the raw data)
+
+read_climate <- function(path){
+  
+  col_names <- readr::read_lines(path, skip = 1, n_max = 1) %>% 
+    stringr::str_remove_all(pattern = '\"') %>% 
+    stringr::str_split(pattern = ",") %>% 
+    purrr::pluck(1) %>% 
+    str_to_lower() %>% 
+    str_detect("snow")
+  
+  if(TRUE %in% col_names){
+    
+    data <- readr::read_csv(path, skip = 2, 
+                            col_types = "_cddddddddd", col_names = c("Date", "solar.rad_1", "solar.rad_2", "wind_speed", "gust_speed",
+                                                                     "temp_F", "RH", "rain_in", "snowdepth_in", "current")) %>% 
+      dplyr::mutate(Date = lubridate::mdy_hms(Date))
+    
+    return(data)
+    
+  } else {
+    
+    data <- readr::read_csv(path, skip = 2, 
+                            col_types = "_cddddd", col_names = c("Date", "solar.rad_1", "wind_speed", "gust_speed", 
+                                                                     "temp_F", "RH")) %>% 
+      dplyr::mutate(Date = lubridate::mdy_hms(Date))
+    
+    return(data)
+    
+  }
+  
+}
+  
+```
+
+
+
+```{r}
+
+## adapted compilation function from wells/soil moisture does not return .csv
+
+compile_atm_data <- function(path, prev_compile = NULL){
+  
+  ## Create char. vector of file names w/ directory path prepended contained in provided path
+  
+  files <- list.files(path, full.names = TRUE)
+  
+  ## Creates list of clean/standardized data (data frames) for all those provided in the path using `clean_SM_data` function
+  
+  listed_files <- purrr::map(files, read_atm_hobo_u20)
+  
+  ## Compiles well data using only those files provided in the path
+  
+  if(is.null(prev_compile)){
+    
+  # Keeps files grouped by instrument and orders data chronologically. Duplicate observations are removed.
+  compiled <- dplyr::bind_rows(listed_files) %>% 
+    dplyr::distinct() %>%
+    # `dplyr::arrange` would not function properly here
+    do(data.frame(with(data = .,.[order(Date),])))
+    
+  return(compiled)
+    
+    ## When prev_compile file is provided, the files provided in the path are appended to the previously compiled file
+    # Performs coalescing join- user does not have to worry about feeding in data that has been previously compiled
+  } else {
+    
+    appended_compile <- prev_compile %>%
+      coalesce_join(compiled, by = "Date") %>% 
+      do(data.frame(with(data = .,.[order(Date),]))) %>%
+      dplyr::distinct() %>% 
+      purrr::discard(~all(is.na(.)))
+    
+    return(appended_compile)
+
+  }
+  
+}
+
+```
+
+
+```{r}
+
+## adapted compilation function from wells/sm does not return .csv
+
+compile_climate_data <- function(path, prev_compile = NULL){
+  
+  ## Create char. vector of file names w/ directory path prepended contained in provided path
+  
+  files <- list.files(path, full.names = TRUE)
+  
+  ## Creates list of clean/standardized data (data frames) for all those provided in the path using `clean_SM_data` function
+  
+  listed_files <- purrr::map(files, read_climate)
+  
+  ## Compiles well data using only those files provided in the path
+  
+  if(is.null(prev_compile)){
+    
+    # Keeps files grouped by instrument and orders data chronologically. Duplicate observations are removed.
+    compiled <- dplyr::bind_rows(listed_files) %>% 
+      dplyr::distinct() %>%
+      # `dplyr::arrange` would not function properly here
+      do(data.frame(with(data = .,.[order(Date),])))
+    
+    return(compiled)
+    
+    ## When prev_compile file is provided, the files provided in the path are appended to the previously compiled file
+    # Performs coalescing join- user does not have to worry about feeding in data that has been previously compiled
+  } else {
+    
+    appended_compile <- prev_compile %>%
+      coalesce_join(compiled, by = "Date") %>% 
+      do(data.frame(with(data = .,.[order(Date),]))) %>%
+      dplyr::distinct() %>% 
+      purrr::discard(~all(is.na(.)))
+    
+    return(appended_compile)
+    
+  }
+  
+}
+
+```
+
+## Compile Control climate-  May2018 thru Aug 2020
+
+### Climate Data
+
+```{r}
+
+compiled_Control_Climate_Aug2020 <- compile_climate_data("Climate_CM_Aug2020")
+
+compiled_Control_Climate_Aug2020 %>% 
+  dplyr::mutate(Date = as.character(Date)) %>% 
+  readr::write_csv("Climate_CM_Aug2020/compiled_Climate_Control_Aug2020.csv")
+
+```
+
+### Atm Data
+
+```{r}
+compiled_Control_ATM_Aug2020 <- compile_atm_data("Atm_CM_Aug2020")
+
+compiled_Control_ATM_Aug2020 %>% 
+  dplyr::mutate(Date = as.character(Date)) %>% 
+  readr::write_csv("Atm_CM_Aug2020/compiled_ATM_Control_Aug2020.csv")
+
+
+```
+## Combine Climate and ATM data
+
+```{r}
+compiled_ATM_Climate_Control_Aug2020 <- dplyr::left_join(compiled_Control_Climate_Aug2020, compiled_Control_ATM_Aug2020, by = "Date")
+
+compiled_ATM_Climate_Control_Aug2020 %>% 
+  dplyr::mutate(Date = as.character(Date)) %>% 
+  readr::write_csv("Climate_CM_Aug2020/compiled_ATM_Climate_Control_Aug2020.csv")
+```
