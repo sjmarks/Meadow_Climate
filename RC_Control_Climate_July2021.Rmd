@@ -1,0 +1,111 @@
+---
+title: "RC_Control_Climate_July2021"
+author: "Simon Marks"
+date: "7/8/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Processing Functions
+
+```{r}
+
+source("climate_processing_funs.R")
+
+```
+
+## Update RC Climate data with July 2021 download
+
+### Climate Data- Rock Creek
+
+```{r}
+
+# previous RC climate compile, May 2021
+compiled_RC_climate_May2021 <- readr::read_csv(file = "Climate_RC_May2021/compiled_Climate_RC_May2021.csv", 
+                                       col_types = cols(Date = col_character(), .default = col_double())) %>% 
+  dplyr::mutate(Date = lubridate::ymd_hms(Date))
+
+```
+
+```{r}
+
+# update compilation with May 2021 climate data
+
+compiled_RC_Climate_July2021 <- compile_climate_data("Climate_RC_July2021", prev_compile = compiled_RC_climate_May2021, written_file_name = "compiled_Climate_RC_July2021.csv")
+
+```
+
+### Atm Data- Rock Creek
+
+```{r}
+
+# previous RC ATM compile, May 2021
+compiled_RC_ATM_May2021 <- readr::read_csv(file = "Atm_RC_May2021/compiled_ATM_RC_May2021.csv", 
+                                       col_types = cols(Date = col_character(), .default = col_double())) %>% 
+  dplyr::mutate(Date = lubridate::ymd_hms(Date))
+
+# update compilation with May 2021 atm data
+compiled_RC_ATM_July2021 <- compile_atm_data("Atm_RC_July2021", prev_compile = compiled_RC_ATM_May2021, written_file_name = "compiled_Atm_RC_July2021.csv")
+
+
+```
+
+### Combine Climate and ATM data for Rock Creek
+
+```{r}
+
+compiled_ATM_Climate_RC_July2021 <- dplyr::left_join(compiled_RC_Climate_July2021, compiled_RC_ATM_July2021, by = "Date") 
+
+compiled_ATM_Climate_RC_July2021 %>% 
+  dplyr::mutate(Date = as.character(Date)) %>% 
+  readr::write_csv("Climate_RC_July2021/compiled_ATM_Climate_RC_July2021.csv")
+
+```
+
+############################ CONTROL CLIMATE COMPILATION STILL NEEDS TO BE DONE
+
+
+## Update Control Climate data with May 2021 download
+
+### Climate Data for Control
+
+```{r}
+
+# previous Control climate compile, Nov 2020
+compiled_Control_climate_Nov2020 <- readr::read_csv(file = "Climate_Control_Nov2020/compiled_Climate_Control_Nov2020.csv", 
+                                       col_types = cols(Date = col_character(), .default = col_double())) %>% 
+  dplyr::mutate(Date = lubridate::ymd_hms(Date))
+
+# update climate compilation with May 2021 climate data
+compiled_Control_Climate_May2021 <- compile_climate_data("Climate_Control_May2021", prev_compile = compiled_Control_climate_Nov2020, written_file_name = "compiled_Climate_Control_May2021.csv")
+
+```
+
+### Atm Data for Control
+
+```{r}
+
+# previous Control ATM compile, Nov 2020
+compiled_Control_ATM_Nov2020 <- readr::read_csv(file = "Atm_Control_Nov2020/compiled_ATM_Control_Nov2020.csv", 
+                                       col_types = cols(Date = col_character(), .default = col_double())) %>% 
+  dplyr::mutate(Date = lubridate::ymd_hms(Date))
+
+# update atm compilation with May 2021 atm data
+compiled_Control_ATM_May2021 <- compile_atm_data("Atm_Control_May2021", prev_compile = compiled_Control_ATM_Nov2020, written_file_name = "compiled_Atm_Control_May2021.csv")
+
+
+```
+
+### Combine Climate and ATM data for Control
+
+```{r}
+compiled_ATM_Climate_Control_May2021 <- dplyr::left_join(compiled_Control_Climate_May2021, compiled_Control_ATM_May2021, by = "Date") 
+
+compiled_ATM_Climate_Control_May2021 %>% 
+  dplyr::mutate(Date = as.character(Date)) %>% 
+  readr::write_csv("Climate_Control_May2021/compiled_ATM_Climate_Control_May2021.csv")
+
+```
