@@ -9,4 +9,8 @@ The **functions** contained in this repo:
 3. Compile atmospheric and climate data for a meadow site in chronological order. Data is compiled in a "tidy" format.
 4. Update a previous compilation for a given meadow site with newly collected raw data files from the field.
 
-Functions for processing are contained in `climate_processing_funs.R`. Most recent compilation for RC and Control climate is May 2021, completed in `RC_Control_Climate_May2021.Rmd`.
+Functions for processing are contained in `climate_processing_funs.R`. Most recent compilation for RC and Control climate is July 2021, completed in `RC_Control_Climate_July2021.Rmd`.
+
+# **TO DO:**
+
+Weekly compilations if desired?
